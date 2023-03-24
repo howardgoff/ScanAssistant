@@ -1,32 +1,27 @@
 """
-pip install pyinsane2
-# pip install pytwain
-pip install numpy
-pip install opencv-python-headless
-pip install keyboard
+ToDo: (https://gitlab.gnome.org/World/OpenPaperwork/libinsane//
+Current error:
+  File "C:\Users\Family\py\ScanAssistant\main.py", line 37, in capture_scan
+    return cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+cv2.error: OpenCV(4.7.0) d:\a\opencv-python\opencv-python\opencv\modules\imgproc\src\color.simd_helpers.hpp:92: error: (-2:Unspecified error) in function '__cdecl cv::impl::`anonymous-namespace'::CvtHelper<struct cv::impl::`anonymous namespace'::Set<1,-1,-1>,struct cv::impl::A0x3c4af206::Set<3,4,-1>,struct cv::impl::A0x3c4af206::Set<0,2,5>,2>::CvtHelper(const class cv::_InputArray &,const class cv::_OutputArray &,int)'
+> Invalid number of channels in input image:
+>     'VScn::contains(scn)'
+> where
+>     'scn' is 3
+
 """
 
-import os
 import keyboard
 import cv2
 import numpy as np
-from typing import Tuple, List
-# from twain import Scanner
+from typing import Tuple
 import pyinsane2
 
 # Define constants
-DPI = 600
+DPI = 300
 ADJUSTMENT_CONSTANTS = (1.2, 1.0)
 QUALITY = 75
-
-
-# def capture_scan(scanner: Scanner) -> np.ndarray:
-#     """
-#     Capture a scan using the provided scanner.
-#     """
-#     scanner.resolution = DPI
-#     scanner.set_region(0, 0, 7 * DPI, 3.25 * 2 * DPI)
-#     return cv2.imdecode(np.frombuffer(scanner.capture(), dtype=np.uint8), cv2.IMREAD_COLOR)
 
 
 def capture_scan(device: str) -> np.ndarray:
@@ -39,14 +34,19 @@ def capture_scan(device: str) -> np.ndarray:
         device.options['resolution'].value = DPI
         device.options['tl-x'].value = 0
         device.options['tl-y'].value = 0
-        # device.options['br-x'].value = 7 * DPI
-        device.options['br-y'].value = int(3.25 * DPI)
+        device.options['br-y'].value = int(6.5 * DPI)
         scan_session = device.scan(multiple=False)
-        image = scan_session.images[-1]
+        # I think this pulls the data out of the buffer into image
+        try:
+            while True:
+                scan_session.scan.read()
+        except EOFError:
+            pass
+        pil_image = scan_session.images[-1]
+        image = np.array(pil_image)
         return cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
     finally:
         pyinsane2.exit()
-
 
 def separate_images(image: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
     """
@@ -125,20 +125,12 @@ def save_images(image_a: np.ndarray, image_b: np.ndarray, scan_count: int, quali
 
 
 def main():
-    # Initialize the scanner
-    # scanner = Scanner()
-    # scanner_device = "Epson Perfection V700/V750"
-    # scanner_device = 'EPSON Perfection V700/V750'
     scanner_device = '{6BDD1FC6-810F-11D0-BEC7-08002BE2092F}\\0000'
     scan_count = 0
 
-    scan = capture_scan(scanner_device)
-    print(type(scan))
-    while False:
+    while True:
         if keyboard.is_pressed('/'):
             # Capture the scan and separate the images
-            # scan = capture_scan(scanner)
-
             scan = capture_scan(scanner_device)
             image_a, image_b = separate_images(scan)
 
@@ -155,17 +147,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-    # pyinsane2.init()
-    # devs = pyinsane2.get_devices()
-    # target_dev = None
-    #
-    # for dev in devs:
-    #     if dev.name == "hplip://32.13241":
-    #         target_dev = dev
-    #         break
-    #
-    # if target_dev is None:
-    #     print("Not found")
-    # else:
-    #     print("Will use {} {}".format(target_dev.vendor, target_dev.model))
