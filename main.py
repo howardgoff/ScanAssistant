@@ -1,20 +1,7 @@
 """
 ToDo: (https://gitlab.gnome.org/World/OpenPaperwork/libinsane//
-Current error:
-  File "C:\Users\Family\py\ScanAssistant\main.py", line 37, in capture_scan
-    return cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-cv2.error: OpenCV(4.7.0) d:\a\opencv-python\opencv-python\opencv\modules\imgproc\src\color.simd_helpers.hpp:92:
- error: (-2:Unspecified error) in function '__cdecl cv::impl::`anonymous-namespace'::CvtHelper<struct cv::impl::
- `anonymous namespace'::Set<1,-1,-1>,struct cv::impl::A0x3c4af206::Set<3,4,-1>,struct cv::impl::A0x3c4af206::
- Set<0,2,5>,2>::CvtHelper(const class cv::_InputArray &,const class cv::_OutputArray &,int)'
-> Invalid number of channels in input image:
->     'VScn::contains(scn)'
-> where
->     'scn' is 3
-
 """
-
+from time import sleep
 import keyboard
 import cv2
 import numpy as np
@@ -59,10 +46,12 @@ def separate_images(image: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
     mid_point = image.shape[1] // 2
     image_a = image[:, :mid_point]
     image_b = image[:, mid_point:]
+    save_images(image_a, image_b, 200, QUALITY)
+
     return image_a, image_b
 
 
-def new_rotate_and_crop(image: np.ndarray) -> np.ndarray:
+def rotate_and_crop(image: np.ndarray) -> np.ndarray:
     """
     Rotate the image to make the objects square and then crop it.
 
@@ -147,7 +136,7 @@ def save_images(image_a: np.ndarray, image_b: np.ndarray, scan_count: int, quali
 
 def main():
     scanner_device = '{6BDD1FC6-810F-11D0-BEC7-08002BE2092F}\\0000'
-    scan_count = 0
+    scan_count = 10
 
     print("Press '/' to start scanning or 'q' to quit.")
 
@@ -166,6 +155,10 @@ def main():
 
             # Increment the scan count
             scan_count += 1
+        elif keyboard.is_pressed('q'):
+            break
+        else:
+            sleep(1)
 
 
 if __name__ == "__main__":
