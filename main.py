@@ -37,10 +37,10 @@ def capture_scan(device: str) -> np.ndarray:
     try:
         device = pyinsane2.Scanner(name=device)
         device.options['resolution'].value = DPI
-        device.options['tl_x'].value = 0
-        device.options['tl_y'].value = 0
-        device.options['br_x'].value = 7 * DPI
-        device.options['br_y'].value = 3.25 * 2 * DPI
+        device.options['tl-x'].value = 0
+        device.options['tl-y'].value = 0
+        # device.options['br-x'].value = 7 * DPI
+        device.options['br-y'].value = int(3.25 * DPI)
         scan_session = device.scan(multiple=False)
         image = None
         for chunk in scan_session:
@@ -132,10 +132,14 @@ def save_images(image_a: np.ndarray, image_b: np.ndarray, scan_count: int, quali
 def main():
     # Initialize the scanner
     # scanner = Scanner()
-    scanner_device = "youe_scanner_device_name"
+    # scanner_device = "Epson Perfection V700/V750"
+    # scanner_device = 'EPSON Perfection V700/V750'
+    scanner_device = '{6BDD1FC6-810F-11D0-BEC7-08002BE2092F}\\0000'
     scan_count = 0
 
-    while True:
+    scan = capture_scan(scanner_device)
+    print(type(scan))
+    while False:
         if keyboard.is_pressed('/'):
             # Capture the scan and separate the images
             # scan = capture_scan(scanner)
@@ -156,3 +160,17 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+    # pyinsane2.init()
+    # devs = pyinsane2.get_devices()
+    # target_dev = None
+    #
+    # for dev in devs:
+    #     if dev.name == "hplip://32.13241":
+    #         target_dev = dev
+    #         break
+    #
+    # if target_dev is None:
+    #     print("Not found")
+    # else:
+    #     print("Will use {} {}".format(target_dev.vendor, target_dev.model))
