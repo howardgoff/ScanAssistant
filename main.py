@@ -42,12 +42,7 @@ def capture_scan(device: str) -> np.ndarray:
         # device.options['br-x'].value = 7 * DPI
         device.options['br-y'].value = int(3.25 * DPI)
         scan_session = device.scan(multiple=False)
-        image = None
-        for chunk in scan_session:
-            if image is None:
-                image = np.array(chunk, dtype=np.uint8)
-            else:
-                image = np.vstack((image, np.array(chunk, dtype=np.uint8)))
+        image = scan_session.images[-1]
         return cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
     finally:
         pyinsane2.exit()
