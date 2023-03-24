@@ -144,14 +144,80 @@ def auto_adjust(image: np.ndarray, adjustment_constants: Tuple[float, float]) ->
     # """
     # return cv2.convertScaleAbs(image, alpha=adjustment_constants[0], beta=adjustment_constants[1])
 
-    image_lab = cv2.cvtColor(image, cv2.COLOR_BGR2Lab)
-    l, a, b = cv2.split(image_lab)
-    clahe = cv2.createCLAHE(clipLimit=adjustment_constants[0], tileGridSize=(8, 8))
-    l_adjusted = clahe.apply(l)
-    l_adjusted = cv2.addWeighted(l, adjustment_constants[1], l_adjusted, 1 - adjustment_constants[1], 0)
-    image_lab_adjusted = cv2.merge((l_adjusted, a, b))
-    image_adjusted = cv2.cvtColor(image_lab_adjusted, cv2.COLOR_Lab2BGR)
-    return image_adjusted
+    # image_lab = cv2.cvtColor(image, cv2.COLOR_BGR2Lab)
+    # l, a, b = cv2.split(image_lab)
+    # clahe = cv2.createCLAHE(clipLimit=adjustment_constants[0], tileGridSize=(8, 8))
+    # l_adjusted = clahe.apply(l)
+    # l_adjusted = cv2.addWeighted(l, adjustment_constants[1], l_adjusted, 1 - adjustment_constants[1], 0)
+    # image_lab_adjusted = cv2.merge((l_adjusted, a, b))
+    # image_adjusted = cv2.cvtColor(image_lab_adjusted, cv2.COLOR_Lab2BGR)
+
+    # Convert the image to the Lab color space
+    lab_image = cv2.cvtColor(image, cv2.COLOR_BGR2Lab)
+
+    # Split the Lab image into L, a, and b channels
+    L, a, b = cv2.split(lab_image)
+
+    # Stretch the L channel for brightness and contrast
+    L = cv2.normalize(L, None, alpha=0, beta=255, norm_type=cv2.NORM_MINMAX)
+
+    # Stretch the a and b channels for color correction
+    a = cv2.normalize(a, None, alpha=0, beta=255, norm_type=cv2.NORM_MINMAX)
+    b = cv2.normalize(b, None, alpha=0, beta=255, norm_type=cv2.NORM_MINMAX)
+
+    # Merge the stretched L, a, and b channels back into a single Lab image
+    corrected_lab_image = cv2.merge((L, a, b))
+
+    # Convert the corrected Lab image back to the original color space (BGR)
+    corrected_image = cv2.cvtColor(corrected_lab_image, cv2.COLOR_Lab2BGR)
+
+    return corrected_image
+
+
+def manual_correct_image(
+        image: np.ndarray,
+        gamma: float = 1.2,
+        brightness: float = 0.0925,
+        brightness_red: float = 1.18,
+        brightness_green: float = 1.12,
+        brightness_blue: float = 1.06,
+        black_point: float = 0.08,
+        white_point: float = 0.11,
+        curve_low: float = 0.39,
+        curve_high: float = 0.809,
+    ) -> np.ndarray:
+
+    # Apply gamma correction
+    gamma_correction = np.array([(i / 255.0) ** (1 / gamma) * 255 for i in range(256)], dtype=np.uint8)
+    corrected_image = cv2.LUT(image, gamma_correction)
+
+    # Adjust the brightness of each color channel
+    corrected_image = corrected_image.astype(np.float32)
+    corrected_image[..., 0] *= brightness_blue
+    corrected_image[..., 1] *= brightness_green
+    corrected_image[..., 2] *= brightness_red
+
+    # Apply global brightness adjustment
+    corrected_image += brightness * 255
+
+    # Clip values to the valid range
+    corrected_image = np.clip(corrected_image, 0, 255)
+
+    # Set black and white points
+    corrected_image = (corrected_image - (black_point * 255)) / (255 * (1 - black_point - white_point))
+
+    # Clip values to the valid range again
+    corrected_image = np.clip(corrected_image, 0, 1)
+
+    # Apply custom curve adjustment
+    mask = corrected_image < curve_low
+    corrected_image[mask] = curve_low * corrected_image[mask] ** 2
+    corrected_image[~mask] = curve_high * (corrected_image[~mask] - curve_low) / (1 - curve_low)
+
+    # Convert back to uint8
+    corrected_image = (corrected_image * 255).astype(np.uint8)
+
+    return corrected_image
 
 
 def save_images(image_a: np.ndarray, image_b: np.ndarray, scan_count: int, quality: int):
