@@ -4,7 +4,10 @@ Current error:
   File "C:\Users\Family\py\ScanAssistant\main.py", line 37, in capture_scan
     return cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-cv2.error: OpenCV(4.7.0) d:\a\opencv-python\opencv-python\opencv\modules\imgproc\src\color.simd_helpers.hpp:92: error: (-2:Unspecified error) in function '__cdecl cv::impl::`anonymous-namespace'::CvtHelper<struct cv::impl::`anonymous namespace'::Set<1,-1,-1>,struct cv::impl::A0x3c4af206::Set<3,4,-1>,struct cv::impl::A0x3c4af206::Set<0,2,5>,2>::CvtHelper(const class cv::_InputArray &,const class cv::_OutputArray &,int)'
+cv2.error: OpenCV(4.7.0) d:\a\opencv-python\opencv-python\opencv\modules\imgproc\src\color.simd_helpers.hpp:92:
+ error: (-2:Unspecified error) in function '__cdecl cv::impl::`anonymous-namespace'::CvtHelper<struct cv::impl::
+ `anonymous namespace'::Set<1,-1,-1>,struct cv::impl::A0x3c4af206::Set<3,4,-1>,struct cv::impl::A0x3c4af206::
+ Set<0,2,5>,2>::CvtHelper(const class cv::_InputArray &,const class cv::_OutputArray &,int)'
 > Invalid number of channels in input image:
 >     'VScn::contains(scn)'
 > where
@@ -44,9 +47,10 @@ def capture_scan(device: str) -> np.ndarray:
             pass
         pil_image = scan_session.images[-1]
         image = np.array(pil_image)
-        return cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
+        return cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
     finally:
         pyinsane2.exit()
+
 
 def separate_images(image: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
     """
@@ -58,16 +62,22 @@ def separate_images(image: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
     return image_a, image_b
 
 
-def rotate_and_crop(image: np.ndarray) -> np.ndarray:
+def new_rotate_and_crop(image: np.ndarray) -> np.ndarray:
     """
     Rotate the image to make the objects square and then crop it.
+
+    1. Detects the light-colored rectangular case against the black background by thresholding the image
+    2. Finds the largest contour, which should represent the border
+    3. Find the bounding rectangle for the contour
+    4. Calculate the required padding to ensure the final crop dimensions are correct
+    5. Pad the bounding rectangle and crop accordingly.
     """
-    # Convert to grayscale and apply Canny edge detection
+    # Convert to grayscale and apply threshold to detect the light-colored rectangular border
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    edges = cv2.Canny(gray, 50, 150)
+    _, thresh = cv2.threshold(gray, 100, 255, cv2.THRESH_BINARY)
 
     # Find the contours
-    contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     contour = max(contours, key=cv2.contourArea)
 
     # Find the rotated rectangle and its angle
@@ -84,14 +94,25 @@ def rotate_and_crop(image: np.ndarray) -> np.ndarray:
     M = cv2.getRotationMatrix2D(center, angle, 1.0)
     rotated = cv2.warpAffine(image, M, (w, h), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE)
 
-    # Crop the image
+    # Find the bounding rectangle for the contour
     x, y, w, h = cv2.boundingRect(contour)
-    cropped = rotated[y:y + h, x:x + w]
 
-    # Resize the image to the final dimensions
-    resized = cv2.resize(cropped, (2100, 3450), interpolation=cv2.INTER_AREA)
+    # Calculate padding to ensure the final crop dimensions are correct pixels
+    target_width = int(3.387 * DPI)
+    target_height = int(5.5 * DPI)
+    pad_width = (target_width - w) // 2
+    pad_height = (target_height - h) // 2
 
-    return resized
+    # Pad the bounding rectangle while ensuring it stays within image boundaries
+    x = max(0, x - pad_width)
+    y = max(0, y - pad_height)
+    x_end = min(rotated.shape[1], x + target_width)
+    y_end = min(rotated.shape[0], y + target_height)
+
+    # Crop the image
+    cropped = rotated[y:y_end, x:x_end]
+
+    return cropped
 
 
 def auto_adjust(image: np.ndarray, adjustment_constants: Tuple[float, float]) -> np.ndarray:
@@ -127,6 +148,8 @@ def save_images(image_a: np.ndarray, image_b: np.ndarray, scan_count: int, quali
 def main():
     scanner_device = '{6BDD1FC6-810F-11D0-BEC7-08002BE2092F}\\0000'
     scan_count = 0
+
+    print("Press '/' to start scanning or 'q' to quit.")
 
     while True:
         if keyboard.is_pressed('/'):
