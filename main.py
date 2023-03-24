@@ -9,10 +9,10 @@ from typing import Tuple
 import pyinsane2
 
 # Define constants
-DPI = 300
+DPI = 600
 ADJUSTMENT_CONSTANTS = (1.2, 1.0)
 QUALITY = 75
-
+THRESHOLD = 80
 
 def capture_scan(device: str) -> np.ndarray:
     """
@@ -22,9 +22,10 @@ def capture_scan(device: str) -> np.ndarray:
     try:
         device = pyinsane2.Scanner(name=device)
         device.options['resolution'].value = DPI
-        device.options['tl-x'].value = 0
+        device.options['tl-x'].value = int(2.5 * DPI)            # x is across; y is down
         device.options['tl-y'].value = 0
-        device.options['br-y'].value = int(6.5 * DPI)
+        device.options['br-x'].value = int(8.5 * DPI)
+        device.options['br-y'].value = int(8 * DPI)
         scan_session = device.scan(multiple=False)
         # I think this pulls the data out of the buffer into image
         try:
@@ -33,7 +34,8 @@ def capture_scan(device: str) -> np.ndarray:
         except EOFError:
             pass
         pil_image = scan_session.images[-1]
-        image = np.array(pil_image)
+        image = np.rot90(np.array(pil_image), 3)         # convert to array and rotate 90 CC x 3
+
         return cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
     finally:
         pyinsane2.exit()
@@ -63,43 +65,72 @@ def rotate_and_crop(image: np.ndarray) -> np.ndarray:
     """
     # Convert to grayscale and apply threshold to detect the light-colored rectangular border
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    _, thresh = cv2.threshold(gray, 100, 255, cv2.THRESH_BINARY)
+    _, thresh = cv2.threshold(gray, THRESHOLD, 255, cv2.THRESH_BINARY)
 
-    # Find the contours
+    # cv2.imwrite('1-thresh1.jpg', thresh, [cv2.IMWRITE_JPEG_QUALITY, 75])
+
+    # Find the largest contour which should represent the slab border
     contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     contour = max(contours, key=cv2.contourArea)
 
-    # Find the rotated rectangle and its angle
+    # Find the min area rectangle - output is: mass center(x,y), size(x,y), angle(cw)
     rect = cv2.minAreaRect(contour)
+    center = rect[0]
     angle = rect[-1]
+    # print(f"minAreaRect: {int(rect[0][0])}, {int(rect[0][1])} : {int(rect[1][0])}, {int(rect[1][1])} : {angle}")
 
-    # Correct the angle
-    if angle < -45:
-        angle = 90 + angle
+    # Correct the angle  -  angle range is [0, 90)
+    if angle > 45:
+        angle = angle - 90
 
-    # Rotate the image
-    (h, w) = image.shape[:2]
-    center = (w // 2, h // 2)
-    M = cv2.getRotationMatrix2D(center, angle, 1.0)
-    rotated = cv2.warpAffine(image, M, (w, h), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE)
+    if angle != 0:
+        # Rotate the image
+        h, w = image.shape[:2]
+        # center = (w // 2, h // 2)             # we are using the mass center of minAreaRect
+        # print(f"rotating: {angle}")
+        rotate_matrix = cv2.getRotationMatrix2D(center, angle, 1.0)
+        rotated = cv2.warpAffine(image, rotate_matrix, (w, h), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE)
+    else:
+        rotated = image     # bypass rotation
+
+    # cv2.imwrite('3-rotated.jpg', rotated, [cv2.IMWRITE_JPEG_QUALITY, 75])
+
+    # recalculate contour of rotated image
+    gray = cv2.cvtColor(rotated, cv2.COLOR_BGR2GRAY)
+    _, thresh = cv2.threshold(gray, THRESHOLD, 255, cv2.THRESH_BINARY)
+
+    # cv2.imwrite('4-thresh2.jpg', thresh, [cv2.IMWRITE_JPEG_QUALITY, 75])
+
+    # Find the largest contour which should represent the slab border
+    contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    contour = max(contours, key=cv2.contourArea)
 
     # Find the bounding rectangle for the contour
-    x, y, w, h = cv2.boundingRect(contour)
+    x, y, w, h = cv2.boundingRect(contour)          # tl-x, tl-y, w, h
+
+    # w += DPI // 33         # this is a fudge factor to compensate for a consistent bias in the boundingRect output
+    # x += DPI // 200
+
+    # print(f"tl-x: {x}; tl-y: {y}; w: {w}; h: {h};")
 
     # Calculate padding to ensure the final crop dimensions are correct pixels
-    target_width = int(3.387 * DPI)
-    target_height = int(5.5 * DPI)
+    target_width = int(3.3 * DPI)
+    target_height = int(5.45 * DPI)
     pad_width = (target_width - w) // 2
     pad_height = (target_height - h) // 2
+    # print(f"pad_width: {pad_width}; pad_height: {pad_height}")
 
     # Pad the bounding rectangle while ensuring it stays within image boundaries
     x = max(0, x - pad_width)
     y = max(0, y - pad_height)
     x_end = min(rotated.shape[1], x + target_width)
     y_end = min(rotated.shape[0], y + target_height)
+    # print(f"{y}: {y_end}, {x}: {x_end}")
 
     # Crop the image
     cropped = rotated[y:y_end, x:x_end]
+
+    # cv2.imwrite('6-cropped.jpg', cropped, [cv2.IMWRITE_JPEG_QUALITY, 75])
 
     return cropped
 
