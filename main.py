@@ -1,3 +1,10 @@
+"""
+pip install pytwain
+pip install numpy
+pip install opencv-python-headless
+pip install keyboard
+"""
+
 import os
 import keyboard
 import cv2
@@ -111,5 +118,5 @@ def main():
             # Increment the scan count
             scan_count += 1
 
-        if __name__ == "__main__":
-            main()
+if __name__ == "__main__":
+    main()
