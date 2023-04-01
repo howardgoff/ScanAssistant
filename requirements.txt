@@ -1,0 +1,7 @@
+easygui~=0.98.3
+keyboard~=0.13.5
+numpy~=1.24.2
+opencv-python-headless~=4.7.0.72
+Pillow~=9.4.0
+pyinsane2~=2.0.13
+pytwain~=2.0
